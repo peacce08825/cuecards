@@ -132,6 +132,48 @@ input[type=file]{display:none;}
 
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:12.5px;font-weight:700;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+/* section header with action button (reorder toggle etc.) */
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px 2px;}
+.section-hd .section-title{margin:0;}
+.reorder-toggle{border:1px solid var(--line);background:#fff;border-radius:9px;padding:5px 11px;font-size:11.5px;font-weight:700;color:var(--ink2);display:flex;align-items:center;gap:5px;}
+.reorder-toggle:hover{border-color:var(--c,#5b3d8f);color:var(--c,#5b3d8f);}
+.reorder-toggle.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+
+/* reorder mode rows */
+.rtile{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;height:48px;touch-action:none;user-select:none;-webkit-user-select:none;}
+.rtile .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.rtile .name{flex:1;font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rtile .drag-handle{flex:0 0 auto;font-size:18px;color:var(--ink3);padding:6px 4px;cursor:grab;touch-action:none;}
+.rtile.dragging{box-shadow:0 8px 20px rgba(20,24,40,.18);z-index:60;background:#faf9ff;}
+
+/* shuffle toggle */
+.shuffle-row{display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;font-weight:700;color:var(--ink);}
+.shuffle-sw{width:38px;height:22px;border-radius:99px;background:var(--line);position:relative;flex:0 0 auto;}
+.shuffle-sw:after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.25);}
+.shuffle-sw.on{background:var(--course-color,#5b3d8f);}
+.shuffle-sw.on:after{left:18px;}
+
+/* dictionary lookup */
+.lookup-btn{position:fixed;z-index:150;background:var(--ink);color:#fff;border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.25);display:none;align-items:center;gap:6px;}
+.lookup-btn.show{display:flex;}
+.lookup-sheet-hd{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;}
+.lookup-word{font-size:19px;font-weight:800;color:var(--ink);flex:1;}
+.lookup-phon{font-size:12.5px;color:var(--ink2);margin-top:2px;}
+.lookup-sec{margin-bottom:14px;}
+.lookup-sec .lbl{font-size:10.5px;font-weight:800;color:var(--ink2);letter-spacing:.04em;margin-bottom:6px;}
+.lookup-pos{display:inline-block;font-size:10.5px;font-weight:800;background:#f2f3f6;color:var(--ink2);border-radius:6px;padding:2px 8px;margin-bottom:5px;}
+.lookup-def{font-size:13px;margin:0 0 6px;padding-left:14px;position:relative;}
+.lookup-def:before{content:"•";position:absolute;left:0;color:var(--ink3);}
+.lookup-kr{font-size:14px;background:#f7f4ff;border-radius:10px;padding:11px 13px;}
+.lookup-loading{text-align:center;padding:24px 0;color:var(--ink2);font-size:12.5px;}
+.lookup-loading .spin{width:28px;height:28px;border:3px solid #e7e3f5;border-top-color:var(--ink);border-radius:50%;margin:0 auto 10px;animation:lspin .8s linear infinite;}
+@keyframes lspin{to{transform:rotate(360deg);}}
+.lookup-error{text-align:center;padding:20px 0;color:var(--ink2);font-size:12.5px;}
+
+/* search */
+.search-input{flex:1;border:1px solid var(--line);background:#f2f3f6;border-radius:11px;padding:9px 14px;font-size:14px;color:var(--ink);}
+.search-input:focus{outline:none;border-color:var(--ink);background:#fff;}
 </style>
 </head>
 <body>
@@ -139,6 +181,8 @@ input[type=file]{display:none;}
 
 <div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<button class="lookup-btn" id="lookupBtn">📖 사전 보기</button>
+<div class="overlay" id="lookupOverlay"><div class="sheet" id="lookupSheet"></div></div>
 
 <script>
 /* ============ STORAGE ============ */
@@ -208,8 +252,11 @@ let state = loadState();
 /* ============ NAV ============ */
 let nav = {view:'home', courseId:null, caseId:null};
 let study = {ids:[], index:0, flipped:false, title:'', color:'#1f4e8c', returnNav:null};
+let reorderOn = false;
+let shuffleOn = (localStorage.getItem('cho_cuecards_shuffle')==='1');
+function shuffleArr(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-function go(view, extra){ nav = Object.assign({view}, extra||{}); render(); window.scrollTo(0,0); }
+function go(view, extra){ nav = Object.assign({view}, extra||{}); reorderOn = false; render(); window.scrollTo(0,0); }
 
 /* ============ HELPERS ============ */
 function courseOf(id){ return state.courses.find(x=>x.id===id); }
@@ -218,6 +265,7 @@ function casesIn(courseId){ return state.cases.filter(x=>x.courseId===courseId);
 function cardsIn(courseId, caseId){ return state.cards.filter(x=>x.courseId===courseId && (caseId==null || x.caseId===caseId)); }
 function starredIn(courseId, caseId){ return cardsIn(courseId, caseId).filter(x=>x.starred); }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function truncate(s, n){ s=(s||'').replace(/\s+/g,' ').trim(); return s.length>n ? s.slice(0,n).trim()+'…' : s; }
 
 let toastTimer=null;
 function toast(msg){
@@ -235,11 +283,30 @@ function render(){
   else if(nav.view==='case') app.innerHTML = renderCase();
   else if(nav.view==='study') app.innerHTML = renderStudy();
   else if(nav.view==='settings') app.innerHTML = renderSettings();
+  else if(nav.view==='search') app.innerHTML = renderSearch();
   bindGlobalEvents();
 }
 
 /* ============ HOME ============ */
 function renderHome(){
+  if(reorderOn){
+    const rows = state.courses.map(co=>`
+      <div class="rtile" data-drag-id="${co.id}">
+        <div class="dot" style="background:${co.color}"></div>
+        <div class="name">${esc(co.name)}</div>
+        <div class="drag-handle">☰</div>
+      </div>`).join('') || `<div class="empty">과목이 없어요</div>`;
+    return `
+      <div class="topbar">
+        <div class="ttl">🗂️ 순서 변경<small>드래그해서 과목 순서를 바꾸세요</small></div>
+        <div class="icon-btn" id="btnDoneReorderHome">완료</div>
+      </div>
+      <div class="content">
+        <div id="reorderListHome">${rows}</div>
+      </div>
+    `;
+  }
+
   const rows = state.courses.map(co=>{
     const cards = cardsIn(co.id);
     const st = starredIn(co.id);
@@ -257,14 +324,65 @@ function renderHome(){
   return `
     <div class="topbar">
       <div class="ttl">🗂️ Cue Cards<small>과목별 플래시카드</small></div>
+      <div class="icon-btn" id="btnSearch">🔍</div>
       <div class="icon-btn" id="btnSettings">⚙️</div>
     </div>
     <div class="content">
-      <div class="section-title">내 과목</div>
+      <div class="section-hd"><div class="section-title">내 과목</div>${state.courses.length>1?'<button class="reorder-toggle" id="btnReorderHome">☰ 순서 변경</button>':''}</div>
       ${rows}
     </div>
     <div class="fab" id="btnAddCourse">＋</div>
   `;
+}
+
+/* ============ SEARCH ============ */
+function renderSearch(){
+  return `
+    <div class="topbar">
+      <div class="back" id="btnBack">‹</div>
+      <input type="text" id="searchInput" class="search-input" placeholder="주제나 질문 검색..." value="${esc(nav.query||'')}" autocomplete="off">
+    </div>
+    <div class="content" id="searchResults"></div>
+  `;
+}
+
+function computeSearchResultsHTML(rawQ){
+  const q = (rawQ||'').trim().toLowerCase();
+  if(!q) return `<div class="empty"><div class="big">🔍</div>과목·주제·카드 내용으로 검색할 수 있어요</div>`;
+
+  const results = [];
+  state.cases.forEach(cs=>{
+    if(cs.name.toLowerCase().includes(q)){
+      const co = courseOf(cs.courseId);
+      if(co) results.push({type:'case', case:cs, course:co});
+    }
+  });
+  state.cards.forEach(cd=>{
+    if(cd.front.toLowerCase().includes(q) || cd.back.toLowerCase().includes(q)){
+      const co = courseOf(cd.courseId);
+      if(co) results.push({type:'card', card:cd, course:co});
+    }
+  });
+
+  if(!results.length) return `<div class="empty"><div class="big">😕</div>"${esc(rawQ.trim())}"에 대한 결과가 없어요</div>`;
+
+  return `<div class="section-title">${results.length}개 결과</div>` + results.map(r=>{
+    if(r.type==='case'){
+      const cnt = cardsIn(r.case.courseId, r.case.id).length;
+      return `<div class="tile" data-goto-case="${r.case.courseId}|${r.case.id}">
+        <div class="dot" style="background:${r.course.color}"></div>
+        <div class="body"><div class="name">📁 ${esc(r.case.name)}</div><div class="meta">${esc(r.course.name)} · 주제 · 카드 ${cnt}개</div></div>
+        <div class="chev">›</div>
+      </div>`;
+    }
+    const cs = r.card.caseId ? caseOf(r.card.caseId) : null;
+    const caseLabel = cs ? cs.name : '일반';
+    return `<div class="tile" data-goto-case="${r.card.courseId}|${r.card.caseId||'__general__'}">
+      <div class="dot" style="background:${r.course.color}"></div>
+      <div class="body"><div class="name">${esc(truncate(r.card.front,60))}</div><div class="meta">${esc(r.course.name)} · ${esc(caseLabel)} — ${esc(truncate(r.card.back,50))}</div></div>
+      <div class="chev">›</div>
+    </div>`;
+  }).join('');
 }
 
 /* ============ COURSE VIEW ============ */
@@ -275,6 +393,25 @@ function renderCourse(){
   const allCards = cardsIn(co.id);
   const starred = starredIn(co.id);
   const generalCards = cardsIn(co.id).filter(x=>!x.caseId);
+
+  if(reorderOn){
+    const rows = cases.map(cs=>`
+      <div class="rtile" data-drag-id="${cs.id}">
+        <div class="dot" style="background:${co.color}"></div>
+        <div class="name">${esc(cs.name)}</div>
+        <div class="drag-handle">☰</div>
+      </div>`).join('') || `<div class="empty">주제가 없어요</div>`;
+    return `
+      <div class="topbar">
+        <div class="back" id="btnBack">‹</div>
+        <div class="ttl">순서 변경<small>드래그해서 주제 순서를 바꾸세요</small></div>
+        <div class="icon-btn" id="btnDoneReorderCourse">완료</div>
+      </div>
+      <div class="content" style="--course-color:${co.color}">
+        <div id="reorderListCourse">${rows}</div>
+      </div>
+    `;
+  }
 
   const caseRows = cases.map(cs=>{
     const cnt = cardsIn(co.id, cs.id).length;
@@ -304,7 +441,8 @@ function renderCourse(){
         <div class="act-btn primary" id="btnStudyAll"><span class="n">▶</span>전체 학습</div>
         <div class="act-btn" id="btnStudyStar"><span class="n">★</span>즐겨찾기만 (${starred.length})</div>
       </div>
-      <div class="section-title">주제 / 판례</div>
+      <div class="shuffle-row"><span>🔀 무작위 순서로 학습</span><div class="shuffle-sw ${shuffleOn?'on':''}" id="shuffleToggle"></div></div>
+      <div class="section-hd"><div class="section-title">주제 / 판례</div>${cases.length>1?'<button class="reorder-toggle" id="btnReorderCourse">☰ 순서 변경</button>':''}</div>
       ${caseRows}
       ${generalCards.length ? generalRow : ''}
       ${!cases.length && !generalCards.length ? `<div class="empty"><div class="big">🗒️</div>주제를 추가하거나 바로 카드를 추가하세요</div>` : ''}
@@ -323,9 +461,28 @@ function renderCase(){
   const cards = isGeneral ? cardsIn(co.id).filter(x=>!x.caseId) : cardsIn(co.id, cs.id);
   const starred = cards.filter(x=>x.starred);
 
+  if(reorderOn){
+    const rows = cards.map(cd=>`
+      <div class="rtile" data-drag-id="${cd.id}">
+        <div class="dot" style="background:${co.color}"></div>
+        <div class="name">${esc(cd.front)}</div>
+        <div class="drag-handle">☰</div>
+      </div>`).join('') || `<div class="empty">카드가 없어요</div>`;
+    return `
+      <div class="topbar">
+        <div class="back" id="btnBack">‹</div>
+        <div class="ttl">순서 변경<small>드래그해서 카드 순서를 바꾸세요</small></div>
+        <div class="icon-btn" id="btnDoneReorderCase">완료</div>
+      </div>
+      <div class="content" style="--course-color:${co.color}">
+        <div id="reorderListCase">${rows}</div>
+      </div>
+    `;
+  }
+
   const rows = cards.map(cd=>`
     <div class="crow">
-      <div class="txt" data-preview="${cd.id}">${esc(cd.front)}</div>
+      <div class="txt lookup-zone" data-preview="${cd.id}">${esc(cd.front)}</div>
       <div class="star-btn ${cd.starred?'on':''}" data-toggle-star="${cd.id}">★</div>
       <div class="edit-btn" data-edit-card="${cd.id}">✎</div>
     </div>
@@ -342,7 +499,8 @@ function renderCase(){
         <div class="act-btn primary" id="btnStudyCase"><span class="n">▶</span>이 주제 학습</div>
         <div class="act-btn" id="btnStudyCaseStar"><span class="n">★</span>즐겨찾기만 (${starred.length})</div>
       </div>
-      <div class="section-title">카드 목록</div>
+      <div class="shuffle-row"><span>🔀 무작위 순서로 학습</span><div class="shuffle-sw ${shuffleOn?'on':''}" id="shuffleToggle"></div></div>
+      <div class="section-hd"><div class="section-title">카드 목록</div>${cards.length>1?'<button class="reorder-toggle" id="btnReorderCase">☰ 순서 변경</button>':''}</div>
       ${rows}
     </div>
     <div class="fab" id="btnAddCard" style="background:${co.color}">＋</div>
@@ -352,8 +510,9 @@ function renderCase(){
 /* ============ STUDY MODE ============ */
 function startStudy(ids, title, color){
   if(!ids.length){ toast('학습할 카드가 없어요'); return; }
+  const finalIds = shuffleOn ? shuffleArr(ids) : ids;
   const returnNav = Object.assign({}, nav);
-  study = {ids, index:0, flipped:false, title, color, returnNav};
+  study = {ids:finalIds, index:0, flipped:false, title, color, returnNav};
   go('study');
 }
 function renderStudy(){
@@ -376,12 +535,12 @@ function renderStudy(){
         <div class="card3d ${study.flipped?'flipped':''}" id="card3d">
           <div class="face front">
             <div class="face-top"><span class="face-tag">FRONT</span><span class="star-btn ${card.starred?'on':''}" data-toggle-star="${card.id}">★</span></div>
-            <div class="face-content"><div class="txt">${esc(card.front)}</div></div>
+            <div class="face-content"><div class="txt lookup-zone">${esc(card.front)}</div></div>
             <div class="tap-hint">👆 탭해서 뒤집기</div>
           </div>
           <div class="face back">
             <div class="face-top"><span class="face-tag">BACK</span><span class="star-btn ${card.starred?'on':''}" data-toggle-star="${card.id}">★</span></div>
-            <div class="face-content"><div class="txt">${esc(card.back)}</div></div>
+            <div class="face-content"><div class="txt lookup-zone">${esc(card.back)}</div></div>
           </div>
         </div>
       </div>
@@ -577,22 +736,219 @@ function sheetEditCard(cardId){
 }
 
 /* ============ EVENTS ============ */
+/* ============ DRAG REORDER ============ */
+function enableDragReorder(containerId, onReorderIds){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+
+  container.querySelectorAll('.drag-handle').forEach(handle=>{
+    handle.addEventListener('pointerdown', (e)=>{
+      const dragEl = handle.closest('[data-drag-id]');
+      if(!dragEl) return;
+      let startY = e.clientY;
+      dragEl.classList.add('dragging');
+      dragEl.style.position = 'relative';
+      e.preventDefault();
+
+      function onMove(e2){
+        const dy = e2.clientY - startY;
+        dragEl.style.transform = `translateY(${dy}px)`;
+        const siblings = [...container.querySelectorAll('[data-drag-id]')];
+        const idx = siblings.indexOf(dragEl);
+        const dragRect = dragEl.getBoundingClientRect();
+        const dragMid = dragRect.top + dragRect.height/2;
+        for(let i=0;i<siblings.length;i++){
+          if(siblings[i]===dragEl) continue;
+          const r = siblings[i].getBoundingClientRect();
+          const mid = r.top + r.height/2;
+          if(i<idx && dragMid<mid){
+            container.insertBefore(dragEl, siblings[i]);
+            startY += (dragRect.height + 8);
+            break;
+          } else if(i>idx && dragMid>mid){
+            container.insertBefore(dragEl, siblings[i].nextSibling);
+            startY -= (dragRect.height + 8);
+            break;
+          }
+        }
+      }
+      function onUp(){
+        dragEl.style.transform = '';
+        dragEl.style.position = '';
+        dragEl.classList.remove('dragging');
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        const newOrder = [...container.querySelectorAll('[data-drag-id]')].map(r=>r.dataset.dragId);
+        onReorderIds(newOrder);
+      }
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    });
+  });
+}
+
+function reorderCourses(newOrderIds){
+  state.courses = newOrderIds.map(id=>state.courses.find(c=>c.id===id)).filter(Boolean);
+  saveState();
+}
+function reorderCases(courseId, newOrderIds){
+  const others = state.cases.filter(c=>c.courseId!==courseId);
+  const reordered = newOrderIds.map(id=>state.cases.find(c=>c.id===id)).filter(Boolean);
+  state.cases = others.concat(reordered);
+  saveState();
+}
+function reorderCards(courseId, caseId, newOrderIds){
+  const isGeneral = caseId==='__general__';
+  const inScope = c => c.courseId===courseId && (isGeneral ? !c.caseId : c.caseId===caseId);
+  const others = state.cards.filter(c=>!inScope(c));
+  const reordered = newOrderIds.map(id=>state.cards.find(c=>c.id===id)).filter(Boolean);
+  state.cards = others.concat(reordered);
+  saveState();
+}
+
+/* ============ DICTIONARY LOOKUP ============ */
+let lastSelectionText = '';
+let selDebounce = null;
+document.addEventListener('selectionchange', ()=>{
+  clearTimeout(selDebounce);
+  selDebounce = setTimeout(()=>{
+    const btn = document.getElementById('lookupBtn');
+    const sel = window.getSelection();
+    if(!sel || sel.isCollapsed || sel.rangeCount===0){ btn.classList.remove('show'); return; }
+    const text = sel.toString().trim();
+    if(!text || text.length>60){ btn.classList.remove('show'); return; }
+    const anchorNode = sel.anchorNode;
+    const el = anchorNode && (anchorNode.nodeType===3 ? anchorNode.parentElement : anchorNode);
+    if(!el || !el.closest('.lookup-zone')){ btn.classList.remove('show'); return; }
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if(rect.width===0 && rect.height===0){ btn.classList.remove('show'); return; }
+    lastSelectionText = text;
+    btn.style.left = Math.max(8, Math.min(window.innerWidth-150, rect.left + rect.width/2 - 65)) + 'px';
+    btn.style.top = Math.max(8, rect.top - 44 + window.scrollY) + 'px';
+    btn.classList.add('show');
+  }, 150);
+});
+
+document.getElementById('lookupBtn').addEventListener('click', ()=>{
+  document.getElementById('lookupBtn').classList.remove('show');
+  openLookup(lastSelectionText);
+});
+
+async function openLookup(text){
+  document.getElementById('lookupSheet').innerHTML = `
+    <div class="sheet-hd"><h3>사전</h3><div class="x" id="lookupClose">✕</div></div>
+    <div class="lookup-loading"><div class="spin"></div>찾아보고 있어요...</div>
+  `;
+  document.getElementById('lookupOverlay').classList.add('show');
+  document.getElementById('lookupClose').onclick = ()=> document.getElementById('lookupOverlay').classList.remove('show');
+
+  const isPhrase = /\s/.test(text);
+  let defData = null, translation = null;
+
+  if(!isPhrase){
+    try{
+      const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/'+encodeURIComponent(text));
+      if(res.ok){ const json = await res.json(); defData = json[0]; }
+    }catch(e){}
+  }
+  try{
+    const tres = await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(text)+'&langpair=en|ko');
+    if(tres.ok){ const tjson = await tres.json(); translation = tjson.responseData && tjson.responseData.translatedText; }
+  }catch(e){}
+
+  renderLookupResult(text, defData, translation);
+}
+
+function renderLookupResult(text, defData, translation){
+  let html = `<div class="sheet-hd"><h3>사전</h3><div class="x" id="lookupClose">✕</div></div>`;
+  html += `<div class="lookup-sheet-hd"><div><div class="lookup-word">${esc(text)}</div>`;
+  if(defData && defData.phonetic){ html += `<div class="lookup-phon">${esc(defData.phonetic)}</div>`; }
+  html += `</div></div>`;
+
+  if(defData && defData.meanings && defData.meanings.length){
+    html += `<div class="lookup-sec"><div class="lbl">ENGLISH DEFINITION</div>`;
+    defData.meanings.slice(0,3).forEach(m=>{
+      html += `<div class="lookup-pos">${esc(m.partOfSpeech||'')}</div>`;
+      (m.definitions||[]).slice(0,2).forEach(d=>{
+        html += `<div class="lookup-def">${esc(d.definition)}</div>`;
+      });
+    });
+    html += `</div>`;
+  } else if(!/\s/.test(text)){
+    html += `<div class="lookup-sec"><div class="lookup-error">영어 사전에서 찾을 수 없어요.</div></div>`;
+  }
+
+  html += `<div class="lookup-sec"><div class="lbl">한국어</div>`;
+  if(translation){ html += `<div class="lookup-kr">${esc(translation)}</div>`; }
+  else { html += `<div class="lookup-error">번역을 가져올 수 없어요.</div>`; }
+  html += `</div>`;
+
+  document.getElementById('lookupSheet').innerHTML = html;
+  document.getElementById('lookupClose').onclick = ()=> document.getElementById('lookupOverlay').classList.remove('show');
+}
+document.getElementById('lookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='lookupOverlay') document.getElementById('lookupOverlay').classList.remove('show'); });
+
 function bindGlobalEvents(){
   const app = document.getElementById('app');
 
   const on = (id, fn) => { const el=document.getElementById(id); if(el) el.onclick = fn; };
 
   on('btnSettings', ()=> go('settings'));
+  on('btnSearch', ()=> go('search', {query:''}));
   on('btnBack', ()=>{
     if(nav.view==='course') go('home');
     else if(nav.view==='case') go('course', {courseId:nav.courseId});
     else if(nav.view==='settings') go('home');
+    else if(nav.view==='search') go('home');
   });
   on('btnAddCourse', ()=> sheetAddCourse());
   on('btnAddCase', ()=> sheetAddCase(nav.courseId));
   on('btnAddCard', ()=> sheetAddCard(nav.courseId, nav.caseId));
   on('btnEditCourse', ()=> sheetEditCourse(nav.courseId));
   on('btnEditCase', ()=> sheetEditCase(nav.caseId));
+
+  on('btnReorderHome', ()=>{ reorderOn=true; render(); });
+  on('btnDoneReorderHome', ()=>{ reorderOn=false; render(); });
+  on('btnReorderCourse', ()=>{ reorderOn=true; render(); });
+  on('btnDoneReorderCourse', ()=>{ reorderOn=false; render(); });
+  on('btnReorderCase', ()=>{ reorderOn=true; render(); });
+  on('btnDoneReorderCase', ()=>{ reorderOn=false; render(); });
+  on('shuffleToggle', ()=>{
+    shuffleOn = !shuffleOn;
+    try{ localStorage.setItem('cho_cuecards_shuffle', shuffleOn?'1':'0'); }catch(e){}
+    render();
+  });
+
+  if(reorderOn){
+    if(nav.view==='home') enableDragReorder('reorderListHome', (ids)=> reorderCourses(ids));
+    else if(nav.view==='course') enableDragReorder('reorderListCourse', (ids)=> reorderCases(nav.courseId, ids));
+    else if(nav.view==='case') enableDragReorder('reorderListCase', (ids)=> reorderCards(nav.courseId, nav.caseId, ids));
+  }
+
+  if(nav.view==='search'){
+    const input = document.getElementById('searchInput');
+    const results = document.getElementById('searchResults');
+    const bindResultClicks = ()=>{
+      results.querySelectorAll('[data-goto-case]').forEach(el=>{
+        el.onclick = ()=>{
+          const [courseId, caseId] = el.dataset.gotoCase.split('|');
+          go('case', {courseId, caseId});
+        };
+      });
+    };
+    results.innerHTML = computeSearchResultsHTML(nav.query);
+    bindResultClicks();
+    input.focus();
+    const v = input.value; input.value=''; input.value=v;
+    input.addEventListener('input', ()=>{
+      nav.query = input.value;
+      results.innerHTML = computeSearchResultsHTML(nav.query);
+      bindResultClicks();
+    });
+  }
 
   on('btnStudyAll', ()=>{ const co=courseOf(nav.courseId); startStudy(cardsIn(co.id).map(x=>x.id), co.name+' — 전체', co.color); });
   on('btnStudyStar', ()=>{ const co=courseOf(nav.courseId); startStudy(starredIn(co.id).map(x=>x.id), co.name+' — 즐겨찾기', co.color); });
@@ -740,6 +1096,8 @@ document.getElementById('sheet').addEventListener('click', (e)=>{
 });
 
 document.addEventListener('keydown', (e)=>{
+  const tag = document.activeElement && document.activeElement.tagName;
+  if(tag==='TEXTAREA' || tag==='INPUT') return;
   if(nav.view!=='study') return;
   if(e.key==='ArrowRight'){ document.getElementById('nextBtn')?.click(); }
   if(e.key==='ArrowLeft'){ document.getElementById('prevBtn')?.click(); }
