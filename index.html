@@ -808,6 +808,47 @@ function reorderCards(courseId, caseId, newOrderIds){
   saveState();
 }
 
+/* ============ SMART IMPORT (merge by name, avoid duplicate courses/cases) ============ */
+function mergeImportedData(data){
+  const courseIdMap = {};
+  let newCases = 0, newCards = 0;
+
+  (data.courses||[]).forEach(ic=>{
+    const existing = state.courses.find(c=>c.name===ic.name);
+    if(existing){
+      courseIdMap[ic.id] = existing.id;
+    } else {
+      state.courses.push({id: ic.id, name: ic.name, color: ic.color || COLOR_PRESETS[state.courses.length % COLOR_PRESETS.length]});
+      courseIdMap[ic.id] = ic.id;
+    }
+  });
+
+  const caseIdMap = {};
+  (data.cases||[]).forEach(icase=>{
+    const mappedCourseId = courseIdMap[icase.courseId] || icase.courseId;
+    const existing = state.cases.find(c=>c.courseId===mappedCourseId && c.name===icase.name);
+    if(existing){
+      caseIdMap[icase.id] = existing.id;
+    } else {
+      state.cases.push({id: icase.id, courseId: mappedCourseId, name: icase.name});
+      caseIdMap[icase.id] = icase.id;
+      newCases++;
+    }
+  });
+
+  (data.cards||[]).forEach(icard=>{
+    const mappedCourseId = courseIdMap[icard.courseId] || icard.courseId;
+    const mappedCaseId = icard.caseId ? (caseIdMap[icard.caseId] || icard.caseId) : null;
+    const dup = state.cards.find(c=>c.courseId===mappedCourseId && c.caseId===mappedCaseId && c.front===icard.front);
+    if(!dup){
+      state.cards.push({id: icard.id, courseId: mappedCourseId, caseId: mappedCaseId, front: icard.front, back: icard.back, starred:false, createdAt: Date.now()});
+      newCards++;
+    }
+  });
+
+  return {newCases, newCards};
+}
+
 /* ============ DICTIONARY LOOKUP ============ */
 let lastSelectionText = '';
 let selDebounce = null;
@@ -1006,10 +1047,9 @@ function bindGlobalEvents(){
       try{
         const data = JSON.parse(reader.result);
         if(!data.courses || !data.cases || !data.cards) throw new Error('bad format');
-        state.courses = state.courses.concat(data.courses);
-        state.cases = state.cases.concat(data.cases);
-        state.cards = state.cards.concat(data.cards);
-        saveState(); render(); toast('백업을 불러와 합쳤어요');
+        const summary = mergeImportedData(data);
+        saveState(); render();
+        toast(`가져왔어요 — 새 카드 ${summary.newCards}개, 새 주제 ${summary.newCases}개`);
       }catch(err){ toast('파일을 읽을 수 없어요 — 형식을 확인해주세요'); }
     };
     reader.readAsText(file);
